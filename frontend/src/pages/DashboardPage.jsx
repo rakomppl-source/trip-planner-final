@@ -11,6 +11,7 @@ import {
   fetchTrips
 } from "../services/tripService";
 import { getWeatherForLocation } from "../services/weatherService";
+import { fetchRoute } from "../services/routeService";
 
 const DashboardPage = () => {
   const { clearAuth, user } = useAuth();
@@ -18,6 +19,7 @@ const DashboardPage = () => {
   const [selectedTripId, setSelectedTripId] = useState(null);
   const [destinations, setDestinations] = useState([]);
   const [weather, setWeather] = useState(null);
+  const [routeInfo, setRouteInfo] = useState(null);
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) || null,
@@ -55,6 +57,26 @@ const DashboardPage = () => {
   useEffect(() => {
     loadDestinations(selectedTripId).catch(console.error);
   }, [selectedTripId]);
+
+  useEffect(() => {
+    if (destinations.length < 2) {
+      setRouteInfo(null);
+      return;
+    }
+
+    fetchRoute(destinations)
+      .then((result) => setRouteInfo(result ? { ...result, error: null } : null))
+      .catch((error) => {
+        console.error("Błąd pobierania trasy:", error);
+        const message =
+          error.response?.status === 403
+            ? "Nieprawidłowy klucz ORS API."
+            : error.response?.status === 400
+            ? "Nie można wyznaczyć trasy między wybranymi punktami."
+            : "Błąd pobierania trasy.";
+        setRouteInfo({ coords: null, distance: null, duration: null, error: message });
+      });
+  }, [destinations]);
 
   const handleCreateTrip = async () => {
     const today = new Date();
@@ -127,6 +149,34 @@ const DashboardPage = () => {
     await loadDestinations(selectedTripId);
   };
 
+  const handleAddByAddress = async ({ kraj, miasto, adres }) => {
+    if (!selectedTripId) return;
+
+    const parts = [adres, miasto, kraj].filter(Boolean);
+    const query = parts.join(", ");
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`
+    );
+
+    if (!response.ok) throw new Error("Błąd połączenia z serwisem geokodowania.");
+
+    const results = await response.json();
+    if (results.length === 0) throw new Error("Nie znaleziono lokalizacji. Sprawdź wpisane dane.");
+
+    const { lat, lon, display_name } = results[0];
+    const locationName = miasto || display_name;
+
+    await createDestination(selectedTripId, {
+      nazwa_miejsca: locationName,
+      latitude: parseFloat(lat),
+      longitude: parseFloat(lon),
+      kolejnosc: destinations.length + 1,
+    });
+
+    await loadDestinations(selectedTripId);
+  };
+
   const handleDestinationClick = async (destination) => {
     const weatherData = await getWeatherForLocation(destination.latitude, destination.longitude);
     setWeather(weatherData);
@@ -160,10 +210,16 @@ const DashboardPage = () => {
           onDeleteDestination={handleDeleteDestination}
           onDestinationClick={handleDestinationClick}
           weather={weather}
+          routeInfo={routeInfo}
+          onAddByAddress={handleAddByAddress}
         />
 
         <section className="flex-1">
-          <MapView destinations={destinations} onMapClick={handleMapClick} />
+          <MapView
+            destinations={destinations}
+            onMapClick={handleMapClick}
+            routeCoords={routeInfo?.coords ?? null}
+          />
         </section>
       </main>
     </div>
