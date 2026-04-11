@@ -1,4 +1,4 @@
-# 🌍 Trip Planner - Akademia Przyszłości
+# 🌍 Trip Planner
 
 Projekt nowoczesnego planera podróży. Aplikacja pozwala na interaktywne planowanie tras na mapie, automatyczne rozpoznawanie nazw miejscowości oraz sprawdzanie prognozy pogody.
 
